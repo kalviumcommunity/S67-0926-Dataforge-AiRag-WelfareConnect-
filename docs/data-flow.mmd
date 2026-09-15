@@ -1,0 +1,113 @@
+sequenceDiagram
+    autonumber
+    title Government Welfare Scheme Document Assistant - End-to-End Data Flow
+
+    %% Actors & Services
+    actor Admin as Scheme Administrator
+    actor User as Citizen / Helpdesk Staff
+    participant WebUI as Web Application (Frontend)
+    participant APIGW as API Gateway / Ingress
+    participant CoreAPI as Core API Service
+    participant ObjStore as Object Storage (S3/MinIO)
+    participant Queue as Task Broker (Redis/RabbitMQ)
+    participant Worker as Background Ingestion Worker
+    participant EmbedAPI as Embedding Model Service
+    participant DB as PostgreSQL (pgvector + Relational)
+    participant SearchEngine as Hybrid Retrieval & Reranker
+    participant LLM as LLM Inference Gateway
+    participant Guard as Citation & Grounding Validator
+    participant Audit as Audit Logging Service
+
+    %% ==========================================
+    %% FLOW A: DOCUMENT INGESTION & INDEXING FLOW
+    %% ==========================================
+    rect rgb(235, 245, 255)
+    note over Admin, DB: Flow A: Official Document Upload, Parsing, Embedding & Indexing
+    Admin->>WebUI: Uploads official scheme PDF + Enters metadata (Dept, Scheme, Effective Date)
+    WebUI->>APIGW: POST /api/v1/documents/upload (Multipart with JWT)
+    APIGW->>CoreAPI: Validate Admin RBAC & File Checksum (SHA-256)
+    CoreAPI->>ObjStore: Store original PDF at raw/{collection_id}/{doc_id}/{version_id}/original.pdf
+    CoreAPI->>DB: Insert record into DOCUMENTS & DOCUMENT_VERSIONS (Status: QUEUED)
+    CoreAPI->>Queue: Publish Ingestion Task Payload (version_id, storage_path)
+    CoreAPI-->>WebUI: 202 Accepted (Tracking ID returned)
+
+    Queue->>Worker: Consume Ingestion Task
+    Worker->>DB: Update DOCUMENT_VERSIONS (Status: PROCESSING)
+    Worker->>ObjStore: Fetch original PDF
+    Worker->>Worker: Virus scan, PDF structure validation & page splitting
+    Worker->>ObjStore: Save page preview images & layout JSON at processed/{version_id}/pages/
+    Worker->>Worker: Hierarchical chunking (Preserve exact Page Number, Header Hierarchy, & Text Offsets)
+    
+    loop For each page & chunk batch
+        Worker->>EmbedAPI: Generate dense vector embeddings (e.g. 768-dim)
+        EmbedAPI-->>Worker: Return embedding vectors
+        Worker->>Worker: Compute tsvector lexical tokens for keyword search
+        Worker->>DB: Batch insert DOCUMENT_PAGES & DOCUMENT_CHUNKS (embeddings, tsv, metadata)
+    end
+    
+    Worker->>DB: Update DOCUMENT_VERSIONS (Status: ACTIVE) & Update current_version
+    Worker->>Audit: Log DOCUMENT_INGESTION_COMPLETED event
+    Audit->>DB: Insert into AUDIT_LOGS
+    end
+
+    %% ==========================================
+    %% FLOW B: USER QUERY, RETRIEVAL & CITATION FLOW
+    %% ==========================================
+    rect rgb(245, 255, 240)
+    note over User, Audit: Flow B: Scoped Query, Hybrid Retrieval, Grounded Generation & Citation Validation
+    User->>WebUI: Selects Scheme Collection & Enters Question
+    WebUI->>APIGW: POST /api/v1/query (Question, Collection IDs, Department Filters)
+    APIGW->>CoreAPI: Route Query & Apply Scope Filters
+    CoreAPI->>SearchEngine: Execute Hybrid Retrieval (Vector + Keyword BM25)
+    
+    SearchEngine->>EmbedAPI: Generate Query Embedding
+    EmbedAPI-->>SearchEngine: Query Vector
+    
+    SearchEngine->>DB: Execute Dense Vector Search (HNSW Cosine) + Sparse Keyword Search (GIN tsvector)
+    DB-->>SearchEngine: Return Candidate Chunks scoped to Collection & Active Versions
+    SearchEngine->>SearchEngine: Reciprocal Rank Fusion (RRF) & Cross-Encoder Reranking
+    SearchEngine-->>CoreAPI: Top-5 Most Relevant Grounded Chunks with Page Metadata
+
+    alt Top Retrieval Similarity Score < Confidence Threshold
+        CoreAPI->>Audit: Log Query Refusal (Status: NOT_FOUND_IN_CORPUS)
+        Audit->>DB: Insert into QUERY_LOGS
+        CoreAPI-->>WebUI: Return deterministic "Information not found in uploaded official documents"
+        WebUI-->>User: Display Not Found Notification & Support Helpline
+    else High-Confidence Context Found
+        CoreAPI->>LLM: Send Grounded Prompt (Context Chunks + Question + Strict Citation Instruction)
+        LLM-->>CoreAPI: Return Candidate Structured Answer with [Doc Name, Page X]
+        
+        CoreAPI->>Guard: Validate Inline Citations & Factual Faithfulness
+        Guard->>Guard: Verify every citation matches retrieved chunk ID & page number
+        
+        alt Validation Passed
+            Guard-->>CoreAPI: Verified Response Payload
+            CoreAPI->>Audit: Log Successful Query & Served Citations (Sanitized PII)
+            Audit->>DB: Insert into QUERY_LOGS & QUERY_CITATIONS
+            CoreAPI-->>WebUI: 200 OK (Structured Answer + Interactive Citation Badges + Legal Disclaimer)
+            WebUI-->>User: Render Structured Answer with Clickable Citations & Non-Guarantee Banner
+        else Hallucinated Citation or Faithfulness Check Failed
+            Guard-->>CoreAPI: Validation Flag: Mismatch Detected
+            CoreAPI->>Audit: Log Grounding Anomaly (Status: VALIDATION_FAILED)
+            Audit->>DB: Insert into AUDIT_LOGS
+            CoreAPI-->>WebUI: Return Fallback "Information could not be verified in official text"
+            WebUI-->>User: Display Refusal & Recommend Admin Review
+        end
+    end
+    end
+
+    %% ==========================================
+    %% FLOW C: CITATION PREVIEW & FEEDBACK
+    %% ==========================================
+    rect rgb(255, 250, 240)
+    note over User, DB: Flow C: Citation Source Excerpt Preview & Feedback Loop
+    User->>WebUI: Clicks Citation Badge (e.g. "[PM_Kisan_Guidelines_2024.pdf, Page 4]")
+    WebUI->>CoreAPI: GET /api/v1/documents/pages/preview (doc_id, page_number)
+    CoreAPI->>ObjStore: Generate Pre-Signed URL for processed/{version_id}/pages/page_4.png
+    CoreAPI-->>WebUI: Return Pre-Signed URL & Highlight Offset
+    WebUI-->>User: Open Modal displaying exact source PDF page with highlighted clause
+
+    User->>WebUI: Submits Feedback (Helpful / Not Helpful + Tags)
+    WebUI->>CoreAPI: POST /api/v1/feedback (query_id, is_helpful, comments)
+    CoreAPI->>DB: Insert into QUERY_FEEDBACK
+    end
