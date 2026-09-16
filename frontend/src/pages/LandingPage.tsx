@@ -1,26 +1,33 @@
 import React, { useEffect, useState } from 'react';
-import { api, CollectionItem, QueryResult, CitationItem } from '../services/api';
+import { api, CollectionItem, QueryResult, CitationItem, UserProfile } from '../services/api';
 import { CollectionSelector } from '../components/CollectionSelector';
 import { QuerySearchBox } from '../components/QuerySearchBox';
 import { AnswerCard } from '../components/AnswerCard';
 import { SourcePreviewModal } from '../components/SourcePreviewModal';
+import { AdminConsole } from '../components/AdminConsole';
+import { HelpdeskToolbar } from '../components/HelpdeskToolbar';
 
-export const LandingPage: React.FC = () => {
+interface LandingPageProps {
+  currentUser: UserProfile | null;
+}
+
+export const LandingPage: React.FC<LandingPageProps> = ({ currentUser }) => {
   const [collections, setCollections] = useState<CollectionItem[]>([]);
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [previewCitation, setPreviewCitation] = useState<CitationItem | null>(null);
 
-  useEffect(() => {
-    async function loadCatalog() {
-      try {
-        const data = await api.getCollections();
-        setCollections(data);
-      } catch (err) {
-        console.error('Failed to load collections:', err);
-      }
+  const loadCatalog = async () => {
+    try {
+      const data = await api.getCollections();
+      setCollections(data);
+    } catch (err) {
+      console.error('Failed to load collections:', err);
     }
+  };
+
+  useEffect(() => {
     loadCatalog();
   }, []);
 
@@ -46,6 +53,9 @@ export const LandingPage: React.FC = () => {
     }
   };
 
+  const isAdmin = currentUser?.role === 'SYSTEM_ADMIN' || currentUser?.role === 'SCHEME_ADMIN';
+  const isHelpdesk = currentUser?.role === 'HELPDESK' || isAdmin;
+
   return (
     <main className="container">
       {/* Hero Header */}
@@ -68,9 +78,17 @@ export const LandingPage: React.FC = () => {
       </section>
 
       {/* Results Display */}
-      {queryResult && <AnswerCard result={queryResult} onPreviewCitation={setPreviewCitation} />}
+      {queryResult && (
+        <>
+          <AnswerCard result={queryResult} onPreviewCitation={setPreviewCitation} />
+          {isHelpdesk && <HelpdeskToolbar currentResult={queryResult} />}
+        </>
+      )}
 
-      {/* Excerpt Modal */}
+      {/* Administrator Console (Enforced server-side & rendered for Admins) */}
+      {isAdmin && <AdminConsole collections={collections} onRefreshCollections={loadCatalog} />}
+
+      {/* Source Excerpt Modal */}
       <SourcePreviewModal citation={previewCitation} onClose={() => setPreviewCitation(null)} />
     </main>
   );
