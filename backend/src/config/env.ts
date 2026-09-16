@@ -58,6 +58,10 @@ const envSchema = z.object({
     .string()
     .default('true')
     .transform(val => val === 'true'),
+
+  // Authentication & Security
+  JWT_SECRET: z.string().default('dev_jwt_secret_key_change_in_production_min_32_chars!'),
+  JWT_EXPIRES_IN: z.string().default('24h'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

@@ -1,7 +1,14 @@
 import React from 'react';
 import { HealthStatusBadge } from './HealthStatusBadge';
+import { UserProfile } from '../services/api';
 
-export const Navbar: React.FC = () => {
+interface NavbarProps {
+  currentUser: UserProfile | null;
+  onOpenAuthModal: () => void;
+  onLogout: () => void;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({ currentUser, onOpenAuthModal, onLogout }) => {
   return (
     <header className="navbar">
       <div className="container navbar-inner">
@@ -30,6 +37,41 @@ export const Navbar: React.FC = () => {
 
         <div className="nav-actions">
           <HealthStatusBadge />
+
+          {currentUser ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div style={{ textAlign: 'right', fontSize: '0.8rem' }}>
+                <div style={{ fontWeight: 600 }}>{currentUser.fullName}</div>
+                <span
+                  className="disclaimer-badge"
+                  style={{ fontSize: '0.65rem', padding: '0.1rem 0.35rem' }}
+                >
+                  {currentUser.role}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="chip"
+                style={{
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.8rem',
+                  background: 'hsl(var(--bg-main))',
+                }}
+                onClick={onLogout}
+              >
+                Log Out
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="search-btn"
+              style={{ position: 'static', padding: '0.45rem 0.95rem', fontSize: '0.85rem' }}
+              onClick={onOpenAuthModal}
+            >
+              Sign In / Register
+            </button>
+          )}
         </div>
       </div>
     </header>

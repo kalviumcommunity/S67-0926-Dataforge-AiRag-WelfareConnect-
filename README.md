@@ -13,6 +13,40 @@ An AI-powered, retrieval-augmented intelligence web application designed for cit
 
 ---
 
+## 🗄️ Database Schema & Architecture
+
+The database is built for **PostgreSQL 16 + pgvector** and implements 14 normalized entities:
+
+| #   | Entity Table            | Key Responsibilities & Capabilities                                                                              |
+| :-- | :---------------------- | :--------------------------------------------------------------------------------------------------------------- |
+| 1   | `roles`                 | RBAC roles (`SYSTEM_ADMIN`, `SCHEME_ADMIN`, `HELPDESK`, `CITIZEN`) and permissions.                              |
+| 2   | `users`                 | User accounts, departments, password hashes, and activity tracking.                                              |
+| 3   | `document_collections`  | Scoped collections of schemes (e.g. Agriculture, Healthcare, Senior Citizen Welfare).                            |
+| 4   | `documents`             | Official scheme documents with status lifecycle (`ACTIVE`, `ARCHIVED`, `PROCESSING`, `FAILED`, `DELETED`).       |
+| 5   | `document_versions`     | Versioned files tracking original filename, storage key, MIME type, SHA-256 hash, publication & effective dates. |
+| 6   | `document_metadata`     | Structured scheme attributes: age, income limits, beneficiary categories, checklists.                            |
+| 7   | `document_pages`        | Page boundary preservation with layout dimensions, page text, and rendered page images.                          |
+| 8   | `extracted_text_chunks` | Hybrid search text chunks with dense embeddings (768d) and lexical GIN tokens (`tsvector`).                      |
+| 9   | `processing_jobs`       | Background task tracking for PDF parsing, text extraction, chunking, and embedding.                              |
+| 10  | `search_sessions`       | Citizen/Staff search session tracking with collection filters and masked client IP.                              |
+| 11  | `questions_and_answers` | Query audit log with generated grounded answers, confidence scores, and latency.                                 |
+| 12  | `citations`             | Precise page-level citations linking answers to chunks, versions, and source page numbers.                       |
+| 13  | `audit_events`          | Immutable government compliance log with before/after state diffs.                                               |
+| 14  | `user_feedback`         | Binary helpful/unhelpful rating and structured feedback tags.                                                    |
+
+### Database Indexes Included:
+
+- `idx_documents_collection_id`: Fast collection scoping.
+- `idx_documents_status`: Active/archived lifecycle filter.
+- `idx_documents_scheme_name`: Trigram/B-Tree lookup on scheme titles.
+- `idx_documents_department`: Departmental query filtering.
+- `idx_document_versions_effective_date`: Chronological policy enforcement.
+- `idx_document_versions_file_hash`: SHA-256 deduplication and integrity check.
+- `idx_extracted_chunks_tsv`: Full-text lexical search index (GIN).
+- `idx_extracted_chunks_embedding`: Dense vector cosine similarity index (HNSW).
+
+---
+
 ## 🏗️ Project Structure
 
 ```
@@ -20,8 +54,14 @@ An AI-powered, retrieval-augmented intelligence web application designed for cit
 │   ├── src/
 │   │   ├── config/          # Zod-validated environment configuration (env.ts)
 │   │   ├── controllers/     # API request handlers (health, collections, documents, queries)
+│   │   ├── db/              # Migrations, seed scripts, database connector
+│   │   │   ├── migrations/  # 001_initial_schema.sql
+│   │   │   ├── seeds/       # 001_initial_seed.sql
+│   │   │   ├── database.ts
+│   │   │   ├── migrator.ts
+│   │   │   └── seed.ts
 │   │   ├── middlewares/     # Error handlers & request logging
-│   │   ├── models/          # TypeScript domain models and schemas (types.ts)
+│   │   ├── models/          # Zod schemas (schema.ts) & TypeScript models (types.ts)
 │   │   ├── routes/          # Express route definitions
 │   │   ├── services/        # Business logic (DocumentService, SearchService, HealthService)
 │   │   ├── workers/         # Asynchronous task queues & document processing workers
@@ -30,7 +70,9 @@ An AI-powered, retrieval-augmented intelligence web application designed for cit
 │   └── tests/               # Vitest unit & integration test suites
 │       ├── config.test.ts
 │       ├── health.test.ts
-│       └── models.test.ts
+│       ├── migrations.test.ts
+│       ├── models.test.ts
+│       └── schema.test.ts
 ├── docs/
 │   ├── architecture.md      # Full technical architecture specification
 │   ├── data-flow.mmd        # Mermaid end-to-end data flow diagram
@@ -79,7 +121,19 @@ Install all runtime and development dependencies:
 npm install
 ```
 
-### 4. Running Locally
+### 4. Database Migrations & Seeding
+
+Apply database migrations and load development seed data:
+
+```bash
+# Run migrations (creates all 14 tables and indexes)
+npm run db:migrate
+
+# Apply initial seed data (roles, dev admin, sample collection & guidelines)
+npm run db:seed
+```
+
+### 5. Running Locally
 
 Start both backend (Port `4000`) and frontend (Port `3000`) concurrently:
 
@@ -115,7 +169,7 @@ The backend provides health-check endpoints for liveness probes, monitoring, and
 ```json
 {
   "status": "healthy",
-  "timestamp": "2026-09-15T07:11:27.077Z",
+  "timestamp": "2026-09-16T04:19:15.382Z",
   "uptimeSeconds": 42,
   "version": "1.0.0",
   "environment": "development",
@@ -131,7 +185,7 @@ The backend provides health-check endpoints for liveness probes, monitoring, and
 
 ## 🧪 Testing, Linting & Quality Assurance
 
-Run the automated test suite:
+Run the automated test suite (5 test suites, 24 tests passing):
 
 ```bash
 npm test
