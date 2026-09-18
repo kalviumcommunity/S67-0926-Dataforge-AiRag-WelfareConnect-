@@ -7,7 +7,7 @@ The actual AI generation pipeline will be plugged in during pipeline implementat
 import time
 from typing import Optional
 from sqlalchemy.orm import Session
-from backend.app.models.db_models import Document, QueryLog
+from backend.app.models.db_models import Citation, Document, QuestionAnswer, SearchSession
 from backend.app.models.schemas import CitationOut, QueryRequest, QueryResponse
 from backend.app.services.pinecone_service import pinecone_service
 
@@ -59,7 +59,7 @@ class SearchService:
                     page_number=4,
                     excerpt=(
                         "All landholding farmer families having cultivable landholding in their names are eligible "
-                        "to receive benefit of Rs. 6,000 per year in three 4-monthly installments of Rs. 2,000 each."
+                        "to receive benefit of Rs. 6,00,000 per year in three 4-monthly installments of Rs. 2,000 each."
                     ),
                     score=0.89,
                 )
@@ -96,17 +96,47 @@ class SearchService:
 
         latency_ms = int((time.time() - start_time) * 1000)
 
-        # Log query without citizen PII
-        query_log = QueryLog(
-            session_id=session_id,
+        # Ensure search session exists or is recorded
+        sess = None
+        if session_id:
+            sess = db.query(SearchSession).filter(SearchSession.session_token == session_id).first()
+            if not sess:
+                sess = SearchSession(
+                    session_token=session_id,
+                    collection_id=request.collection_id,
+                )
+                db.add(sess)
+                try:
+                    db.commit()
+                    db.refresh(sess)
+                except Exception:
+                    db.rollback()
+
+        # Log question & answer without citizen PII
+        qa_log = QuestionAnswer(
+            session_id=sess.id if sess else None,
             collection_id=request.collection_id,
-            query_text=request.query,
-            retrieved_chunk_ids=[c.document_id for c in citations],
+            question=request.query,
+            answer=answer,
             latency_ms=latency_ms,
             is_refusal=is_refusal,
         )
-        db.add(query_log)
+        db.add(qa_log)
         try:
+            db.commit()
+            db.refresh(qa_log)
+            # Create citation relational records if target_doc exists
+            for c in citations:
+                if target_doc:
+                    db_citation = Citation(
+                        qa_id=qa_log.id,
+                        document_id=target_doc.id,
+                        page_number=c.page_number,
+                        document_title=c.document_title,
+                        excerpt=c.excerpt,
+                        confidence_score=c.score,
+                    )
+                    db.add(db_citation)
             db.commit()
         except Exception:
             db.rollback()
