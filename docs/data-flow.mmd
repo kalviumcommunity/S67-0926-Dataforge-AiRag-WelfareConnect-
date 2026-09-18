@@ -1,0 +1,85 @@
+flowchart TD
+    %% Global Styling
+    classDef client fill:#E0F2FE,stroke:#0284C7,stroke-width:2px,color:#0369A1;
+    classDef api fill:#FEF3C7,stroke:#D97706,stroke-width:2px,color:#92400E;
+    classDef worker fill:#F3E8FF,stroke:#9333EA,stroke-width:2px,color:#6B21A8;
+    classDef storage fill:#DCFCE7,stroke:#16A34A,stroke-width:2px,color:#15803D;
+    classDef ai fill:#FFE4E6,stroke:#E11D48,stroke-width:2px,color:#9F1239;
+
+    %% Client Layer
+    subgraph Clients["Frontend Web Clients (Desktop / Mobile Browser)"]
+        AdminUI["Admin Ingestion Portal<br/>(Upload, Collection & Version Management)"]:::client
+        CitizenUI["Citizen & Helpdesk Query UI<br/>(Search, Filter, Citation Viewer, Stream)"]:::client
+    end
+
+    %% API Gateway & Backend Services
+    subgraph GatewayLayer["Backend API Gateway & Services (FastAPI / Node.js)"]
+        AuthService["Auth & RBAC Middleware<br/>(Admin JWT / Public Rate Limiter)"]:::api
+        AdminAPI["Admin Document Service<br/>(Metadata, Collections, Ingest Trigger)"]:::api
+        QueryAPI["RAG Query Service<br/>(Hybrid Search, Context Assembly, SSE Stream)"]:::api
+    end
+
+    %% Async Task Queue & Worker Layer
+    subgraph IngestionPipeline["Async Processing Pipeline (Queue + Background Workers)"]
+        Queue["Redis Job Queue<br/>(BullMQ / Celery)"]:::worker
+        WorkerManager["Worker Process Manager"]:::worker
+        PDFParser["PDF Validator & Page Splitter<br/>(pypdf / pdfplumber)"]:::worker
+        OCREngine["OCR / Table Extractor<br/>(Tesseract / PyMuPDF)"]:::worker
+        Chunker["Semantic Page-Aware Chunker<br/>(Parent-Child / Overlap)"]:::worker
+        EmbedWorker["Dense Embedding Generator<br/>(text-embedding-3 / bge-large)"]:::worker
+    end
+
+    %% Storage Layer
+    subgraph StorageLayer["Data & Persistence Tier"]
+        ObjectStore[("S3 / MinIO Storage<br/>(Raw PDFs, Page Images, JSON)")]:::storage
+        RelationalDB[("PostgreSQL 16 Database<br/>(Collections, Docs, Versions, Pages, Audits)")]:::storage
+        HybridVectorDB[("Vector & Keyword Store<br/>(Qdrant / pgvector + BM25 tsvector)")]:::storage
+    end
+
+    %% AI & LLM Services
+    subgraph AICloud["AI & LLM Tier"]
+        LLMInference["Grounded LLM Engine<br/>(Strict Closed-World Prompt)"]:::ai
+        Reranker["Cross-Encoder Reranker<br/>(Cohere / bge-reranker)"]:::ai
+    end
+
+    %% --- INGESTION FLOW ---
+    AdminUI -->|1. Upload PDF + Collection & Version Metadata| AuthService
+    AuthService -->|2. Authorize Admin Token| AdminAPI
+    AdminAPI -->|3. Store Raw File| ObjectStore
+    AdminAPI -->|4. Create Initial DB Records<br/>(Doc, Version: 'PROCESSING')| RelationalDB
+    AdminAPI -->|5. Enqueue Ingestion Job| Queue
+
+    Queue -->|6. Dequeue Job| WorkerManager
+    WorkerManager -->|7. Fetch Raw PDF| ObjectStore
+    WorkerManager -->|8. Validate & Split Pages| PDFParser
+    PDFParser -->|9. Render Page Thumbnails/Images| ObjectStore
+    PDFParser -->|10. Extract Text & Tables| OCREngine
+    OCREngine -->|11. Page Text Chunks & Offsets| Chunker
+    Chunker -->|12. Compute Dense Vectors| EmbedWorker
+    EmbedWorker -->|13. Batch Embeddings API| LLMInference
+
+    Chunker -->|14. Store Page Metadata & Chunks| RelationalDB
+    EmbedWorker -->|15. Upsert Vectors with Page & Filter Metadata| HybridVectorDB
+    WorkerManager -->|16. Update Version Status to 'ACTIVE' & Write Audit Log| RelationalDB
+
+    %% --- QUERY & RETRIEVAL FLOW ---
+    CitizenUI -->|A. Query + Collection/Scheme Filter| AuthService
+    AuthService -->|B. Apply Rate Limits & Session Headers| QueryAPI
+    QueryAPI -->|C. Validate Collection Scope & Active Version IDs| RelationalDB
+    QueryAPI -->|D. Hybrid Search: Dense Vector + BM25 Keyword Filtered by Collection & Version| HybridVectorDB
+
+    HybridVectorDB -->|E. Candidate Chunks with Page Numbers & Scores| QueryAPI
+    QueryAPI -->|F. Optional Cross-Encoder Re-rank Candidates| Reranker
+    Reranker -->|G. Top-K Ranked Chunks| QueryAPI
+
+    QueryAPI -->|H. Check Threshold & Assemble Closed-World Context| QueryAPI
+    
+    QueryAPI -->|I. Send Strict Prompt + Context + Citation Schema| LLMInference
+    LLMInference -->|J. Stream Tokens + [Doc, Page] Citation Tags| QueryAPI
+
+    QueryAPI -->|K. Server-Sent Events (SSE) Stream Response + Citations| CitizenUI
+    QueryAPI -->|L. Log Anonymized Query & Latency (No PII)| RelationalDB
+
+    %% Citation Inspection Sub-flow
+    CitizenUI -.->|M. Click Citation Badge (Doc ID, Page Num)| AdminAPI
+    AdminAPI -.->|N. Fetch Page Image / Extracted Text Preview| ObjectStore

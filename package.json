@@ -1,0 +1,24 @@
+{
+  "name": "welfareconnect-workspace",
+  "version": "1.0.0",
+  "description": "Government Welfare Scheme Document Assistant (Next.js + FastAPI + Pinecone)",
+  "private": true,
+  "scripts": {
+    "dev:backend": "python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "test:backend": "python -m pytest backend/tests -v",
+    "test": "python -m pytest backend/tests",
+    "lint:backend": "python -m ruff check backend/",
+    "lint:frontend": "npm --prefix frontend run lint",
+    "lint": "python -m ruff check backend/",
+    "type-check:frontend": "npm --prefix frontend run type-check",
+    "type-check:backend": "python -m mypy backend/app",
+    "type-check": "python -m mypy backend/app",
+    "format": "prettier --write \"frontend/src/**/*.{ts,tsx,css}\" \"docs/**/*.md\"",
+    "db:init": "python -m backend.app.db.init_db"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  }
+}
