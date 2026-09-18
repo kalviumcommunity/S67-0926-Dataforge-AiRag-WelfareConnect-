@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { AdminConsole } from '../components/AdminConsole';
 import { AuthModal } from '../components/AuthModal';
 import { CitationPreviewModal } from '../components/CitationPreviewModal';
 import { DisclaimerBanner } from '../components/DisclaimerBanner';
+import { HelpdeskToolbar } from '../components/HelpdeskToolbar';
 import { HeroSearch } from '../components/HeroSearch';
 import { Navbar } from '../components/Navbar';
 import { SchemeCatalog } from '../components/SchemeCatalog';
@@ -13,15 +15,15 @@ import { AuthSessionResponse, Citation, Collection, User } from '../lib/types';
 export default function HomePage() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
 
-  useEffect(() => {
-    // Load active collections
+  const loadCollections = () => {
     ApiService.getCollections()
       .then((data) => setCollections(data))
       .catch(() => {
-        // Fallback demo collections if backend is warming up
+        // Fallback demo collections
         setCollections([
           {
             id: 'col-0000000-0000-4000-8000-000000000001',
@@ -34,28 +36,32 @@ export default function HomePage() {
             total_documents: 3,
             created_at: new Date().toISOString(),
           },
-          {
-            id: 'col-0000000-0000-4000-8000-000000000002',
-            name: 'Agriculture & Farmer Welfare (PM-Kisan)',
-            slug: 'farmer-welfare-pmkisan',
-            description:
-              'Direct income support and operational circulars for farmer welfare.',
-            department: 'Ministry of Agriculture & Farmers Welfare',
-            is_active: true,
-            total_documents: 2,
-            created_at: new Date().toISOString(),
-          },
         ]);
       });
+  };
+
+  useEffect(() => {
+    loadCollections();
   }, []);
 
   const handleLoginSuccess = (session: AuthSessionResponse) => {
     setUser(session.user);
+    setToken(session.token);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (token) {
+      await ApiService.logout(token);
+    }
     setUser(null);
+    setToken(null);
   };
+
+  const isHelpdeskUser =
+    user && (user.role === 'HELPDESK' || user.role === 'SYSTEM_ADMIN');
+
+  const isAdminUser =
+    user && (user.role === 'SYSTEM_ADMIN' || user.role === 'SCHEME_ADMIN');
 
   return (
     <div className="layout-container">
@@ -71,6 +77,17 @@ export default function HomePage() {
           collections={collections}
           onCitationClick={(citation) => setActiveCitation(citation)}
         />
+
+        {/* Role-Specific Protected Consoles */}
+        {isHelpdeskUser && token && <HelpdeskToolbar token={token} />}
+
+        {isAdminUser && token && (
+          <AdminConsole
+            token={token}
+            collections={collections}
+            onRefreshCollections={loadCollections}
+          />
+        )}
 
         <SchemeCatalog collections={collections} />
       </main>

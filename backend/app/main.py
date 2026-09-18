@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.config import settings
 from backend.app.db.init_db import init_db
-from backend.app.routers import audit, auth, collections, documents, health, search
+from backend.app.routers import audit, auth, collections, documents, feedback, health, search
 
 
 @asynccontextmanager
@@ -40,6 +40,7 @@ app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(collections.router, prefix=settings.API_V1_STR)
 app.include_router(documents.router, prefix=settings.API_V1_STR)
 app.include_router(search.router, prefix=settings.API_V1_STR)
+app.include_router(feedback.router, prefix=settings.API_V1_STR)
 app.include_router(audit.router, prefix=settings.API_V1_STR)
 
 

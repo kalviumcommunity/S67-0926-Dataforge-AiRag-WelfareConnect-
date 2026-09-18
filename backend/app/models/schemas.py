@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------
-# User Roles & Auth Schemas (Prompt 05 Preservation)
+# User Roles & Auth Schemas
 # ---------------------------------------------------------
 
 class UserRole(str, Enum):
@@ -25,15 +25,28 @@ ROLE_PERMISSIONS: Dict[UserRole, List[str]] = {
         "users:manage",
         "audit:read",
         "docs:all",
+        "docs:upload",
+        "docs:process",
+        "docs:archive",
+        "docs:delete",
         "collections:manage",
+        "query:execute",
+        "citations:preview",
+        "feedback:submit",
+        "history:read",
+        "eligibility:check",
     ],
     UserRole.SCHEME_ADMIN: [
         "docs:upload",
         "docs:process",
         "docs:archive",
         "docs:delete",
+        "docs:all",
         "collections:manage",
         "audit:read",
+        "query:execute",
+        "citations:preview",
+        "feedback:submit",
     ],
     UserRole.HELPDESK: [
         "query:execute",
@@ -124,8 +137,22 @@ class DocumentVersionStatus(str, Enum):
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
     ACTIVE = "ACTIVE"
+    ARCHIVED = "ARCHIVED"
     DEPRECATED = "DEPRECATED"
     FAILED = "FAILED"
+    DELETED = "DELETED"
+
+
+class DocumentUploadRequest(BaseModel):
+    collection_id: str
+    scheme_name: str
+    department: str
+    state_or_district: Optional[str] = "National / All States"
+    language: Optional[str] = "en"
+    original_filename: str
+    storage_file_key: Optional[str] = None
+    file_content_base64: Optional[str] = None
+    effective_date: Optional[datetime] = None
 
 
 class DocumentOut(BaseModel):
@@ -134,6 +161,7 @@ class DocumentOut(BaseModel):
     title: str
     scheme_code: Optional[str] = None
     department: Optional[str] = None
+    state_or_district: Optional[str] = None
     current_version: int = 1
     status: DocumentVersionStatus = DocumentVersionStatus.ACTIVE
     total_pages: int = 0
@@ -143,6 +171,14 @@ class DocumentOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DocumentActionResponse(BaseModel):
+    success: bool
+    document_id: str
+    action: str
+    status: str
+    message: str
+
+
 class PageOut(BaseModel):
     page_number: int
     text_preview: str
@@ -150,7 +186,7 @@ class PageOut(BaseModel):
 
 
 # ---------------------------------------------------------
-# Query & Search Schemas
+# Query, Eligibility & Feedback Schemas
 # ---------------------------------------------------------
 
 class CitationOut(BaseModel):
@@ -168,6 +204,7 @@ class QueryRequest(BaseModel):
 
 
 class QueryResponse(BaseModel):
+    qa_id: Optional[str] = None
     answer: str
     citations: List[CitationOut] = []
     is_refusal: bool = False
@@ -176,6 +213,48 @@ class QueryResponse(BaseModel):
         "determination. Refer to the cited official document for authoritative guidance."
     )
     latency_ms: int = 0
+
+
+class EligibilityCheckRequest(BaseModel):
+    collection_id: Optional[str] = None
+    applicant_age: Optional[int] = None
+    annual_income: Optional[float] = None
+    landholding_hectares: Optional[float] = None
+    residence_state: Optional[str] = None
+    occupational_category: Optional[str] = None
+
+
+class EligibilityCheckResponse(BaseModel):
+    eligible_schemes: List[Dict[str, Any]]
+    ineligible_schemes: List[Dict[str, Any]]
+    evaluation_summary: str
+    citations: List[CitationOut]
+    disclaimer: str = (
+        "Preliminary algorithmic evaluation based on indexed policy circulars. "
+        "Official eligibility must be verified by the competent department."
+    )
+
+
+class QueryHistoryItem(BaseModel):
+    id: str
+    session_id: Optional[str]
+    question: str
+    answer: str
+    is_refusal: bool
+    latency_ms: int
+    created_at: datetime
+
+
+class FeedbackCreateRequest(BaseModel):
+    qa_id: str
+    rating: int = Field(..., description="1 for helpful, -1 for unhelpful")
+    feedback_text: Optional[str] = None
+
+
+class FeedbackResponse(BaseModel):
+    success: bool
+    feedback_id: str
+    message: str
 
 
 # ---------------------------------------------------------

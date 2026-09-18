@@ -375,6 +375,10 @@ class AuditEvent(Base):
         return self.action_type
 
     @property
+    def entity_type(self) -> str:
+        return self.entity_table
+
+    @property
     def details(self) -> dict:
         return self.metadata_json or {}
 

@@ -1,6 +1,6 @@
 """
 Authentication and Role-Based Access Control (RBAC) Service.
-Preserves Prompt 05 user management, roles matrix, token issuance, and audit tracking.
+Preserves user management, roles matrix, token issuance, session expiration, and audit tracking.
 """
 
 from typing import Optional
@@ -12,7 +12,7 @@ from backend.app.core.security import (
     hash_password,
     verify_password,
 )
-from backend.app.models.db_models import User
+from backend.app.models.db_models import Role, User
 from backend.app.models.schemas import (
     AuthSessionResponse,
     CreateStaffRequest,
@@ -40,11 +40,13 @@ class AuthService:
                 detail="User with this email already exists."
             )
 
+        citizen_role = db.query(Role).filter(Role.name == UserRole.CITIZEN.value).first()
         hashed_pwd = hash_password(request.password)
         new_user = User(
             email=normalized_email,
             password_hash=hashed_pwd,
             full_name=request.full_name,
+            role_id=citizen_role.id if citizen_role else None,
             role=UserRole.CITIZEN.value,
             department="Public Citizen",
             is_active=True,
@@ -100,11 +102,13 @@ class AuthService:
                 detail="User with this email already exists."
             )
 
+        target_role = db.query(Role).filter(Role.name == request.role.value).first()
         hashed_pwd = hash_password(request.password)
         new_user = User(
             email=normalized_email,
             password_hash=hashed_pwd,
             full_name=request.full_name,
+            role_id=target_role.id if target_role else None,
             role=request.role.value,
             department=request.department or "General Administration",
             is_active=True,
@@ -189,6 +193,24 @@ class AuthService:
             token=token,
             expires_in_minutes=settings.JWT_EXPIRES_IN_MINUTES,
         )
+
+    @staticmethod
+    def logout(
+        db: Session,
+        user_id: str,
+        ip_address: Optional[str] = "127.0.0.1"
+    ) -> dict:
+        """Log user session termination and audit event."""
+        AuditService.log_event(
+            db=db,
+            action="USER_LOGOUT",
+            entity_type="users",
+            user_id=user_id,
+            entity_id=user_id,
+            details={"logout_success": True},
+            ip_address=ip_address,
+        )
+        return {"success": True, "message": "Successfully logged out."}
 
     @staticmethod
     def get_user_by_id(db: Session, user_id: str) -> Optional[UserOut]:
