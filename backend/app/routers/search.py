@@ -39,7 +39,7 @@ def execute_search_query(
     if current_user:
         session_id = f"user-{current_user.id}"
 
-    return SearchService.execute_query(db, request, session_id=session_id)
+    return SearchService.execute_query(db, request, session_id=session_id, current_user=current_user)
 
 
 @router.post("/eligibility", response_model=EligibilityCheckResponse)

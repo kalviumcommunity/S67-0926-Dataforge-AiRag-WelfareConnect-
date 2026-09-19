@@ -16,15 +16,34 @@ class DatabaseMigrator:
     @classmethod
     def apply_migrations(cls, db: Session = None) -> None:
         """Apply all pending SQL migrations to the target database."""
-        # Ensure base metadata tables are registered
-        Base.metadata.create_all(bind=engine)
-
         close_db = False
         if db is None:
             db = SessionLocal()
             close_db = True
 
+        target_engine = db.get_bind() if db is not None else engine
+        # Ensure base metadata tables are registered
+        Base.metadata.create_all(bind=target_engine)
+
         try:
+            # Add missing columns safely for SQLite/PostgreSQL development updates
+            alter_statements = [
+                "ALTER TABLE document_pages ADD COLUMN native_text TEXT",
+                "ALTER TABLE document_pages ADD COLUMN ocr_text TEXT",
+                "ALTER TABLE document_pages ADD COLUMN extraction_method VARCHAR(20) DEFAULT 'NATIVE'",
+                "ALTER TABLE document_pages ADD COLUMN ocr_confidence REAL",
+                "ALTER TABLE document_pages ADD COLUMN is_scanned BOOLEAN DEFAULT 0",
+                "ALTER TABLE document_pages ADD COLUMN requires_admin_review BOOLEAN DEFAULT 0",
+                "ALTER TABLE document_pages ADD COLUMN review_reason VARCHAR(255)",
+                "ALTER TABLE processing_jobs ADD COLUMN summary_details JSON",
+            ]
+            for alter_sql in alter_statements:
+                try:
+                    db.execute(text(alter_sql))
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
             if os.path.exists(cls.MIGRATIONS_DIR):
                 migration_files = sorted(
                     [f for f in os.listdir(cls.MIGRATIONS_DIR) if f.endswith(".sql")]
@@ -41,13 +60,14 @@ class DatabaseMigrator:
                     for stmt in statements:
                         try:
                             db.execute(text(stmt))
+                            db.commit()
                         except Exception:
                             # Catch table/index already exists warnings in sqlite/postgres
-                            pass
-                    db.commit()
+                            db.rollback()
         finally:
             if close_db:
                 db.close()
+
 
 
 def run_migrations():

@@ -214,7 +214,14 @@ class DocumentPage(Base):
     version_id = Column(String(36), ForeignKey("document_versions.id"), nullable=False, index=True)
     document_id = Column(String(36), ForeignKey("documents.id"), nullable=True, index=True)
     page_number = Column(Integer, nullable=False)
-    raw_text = Column(Text, nullable=False)
+    raw_text = Column(Text, nullable=False)  # Canonical deduplicated text for chunking
+    native_text = Column(Text, nullable=True)  # Native PDF text stream
+    ocr_text = Column(Text, nullable=True)  # OCR engine text
+    extraction_method = Column(String(20), default="NATIVE", nullable=False)  # NATIVE, OCR, HYBRID
+    ocr_confidence = Column(Float, nullable=True)  # OCR confidence score (0.0 to 100.0)
+    is_scanned = Column(Boolean, default=False, nullable=False)
+    requires_admin_review = Column(Boolean, default=False, nullable=False)
+    review_reason = Column(String(255), nullable=True)
     storage_image_path = Column(String(500), nullable=True)
     word_count = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -263,12 +270,14 @@ class ProcessingJob(Base):
     status = Column(String(30), default="QUEUED", nullable=False, index=True)  # QUEUED, RUNNING, COMPLETED, FAILED
     progress_percent = Column(Integer, default=0, nullable=False)
     error_message = Column(Text, nullable=True)
+    summary_details = Column(JSON, nullable=True)  # { native_text_pages, ocr_pages, failed_pages, low_confidence_pages, total_pages }
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     document = relationship("Document", back_populates="processing_jobs")
     version = relationship("DocumentVersion", back_populates="processing_jobs")
+
 
 
 # -----------------------------------------------------------------------------

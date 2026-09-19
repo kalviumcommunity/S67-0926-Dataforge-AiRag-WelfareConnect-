@@ -12,3 +12,8 @@ pytest-asyncio>=0.23.0
 ruff>=0.3.0
 mypy>=1.9.0
 pinecone-client>=3.0.0
+pypdf>=4.0.0
+pypdfium2>=4.0.0
+pytesseract>=0.3.10
+reportlab>=4.0.0
+

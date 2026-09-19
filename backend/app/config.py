@@ -63,7 +63,21 @@ class Settings(BaseSettings):
     S3_BUCKET_NAME: str = "placeholder-welfareconnect-bucket"
     S3_REGION: str = "us-east-1"
     S3_ACCESS_KEY_ID: str = "placeholder-s3-key"
-    S3_SECRET_ACCESS_KEY: str = "placeholder-s3-secret"
+    # File Upload & Ingestion Constraints
+    MAX_UPLOAD_SIZE_MB: int = 50
+    MAX_UPLOAD_SIZE_BYTES: int = 50 * 1024 * 1024
+    ALLOWED_MIME_TYPES: List[str] = ["application/pdf"]
+    ALLOWED_FILE_EXTENSIONS: List[str] = [".pdf"]
+
+    # OCR & Ingestion Pipeline Configuration
+    OCR_ENGINE: str = "auto"  # "auto", "tesseract", "fallback", "heuristic"
+    OCR_CONFIDENCE_THRESHOLD: float = 70.0  # Under 70% confidence marks for administrator review
+    OCR_MIN_WORD_THRESHOLD: int = 15  # Minimum native words before triggering OCR
+    OCR_DPI: int = 200  # Resolution for rendering scanned pages
+    OCR_LANGUAGES: str = "eng"
+    MAX_PROCESSING_RETRIES: int = 3
+    RETRY_BACKOFF_BASE_SECONDS: float = 0.5
+
 
     model_config = SettingsConfigDict(
         env_file=".env",

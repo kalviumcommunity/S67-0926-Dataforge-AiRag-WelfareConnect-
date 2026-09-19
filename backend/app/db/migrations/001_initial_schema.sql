@@ -114,6 +114,13 @@ CREATE TABLE IF NOT EXISTS document_pages (
     document_id VARCHAR(36) REFERENCES documents(id) ON DELETE CASCADE,
     page_number INTEGER NOT NULL,
     raw_text TEXT NOT NULL,
+    native_text TEXT,
+    ocr_text TEXT,
+    extraction_method VARCHAR(20) NOT NULL DEFAULT 'NATIVE',
+    ocr_confidence REAL,
+    is_scanned BOOLEAN NOT NULL DEFAULT 0,
+    requires_admin_review BOOLEAN NOT NULL DEFAULT 0,
+    review_reason VARCHAR(255),
     storage_image_path VARCHAR(500),
     word_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -150,12 +157,14 @@ CREATE TABLE IF NOT EXISTS processing_jobs (
     status VARCHAR(30) NOT NULL DEFAULT 'QUEUED',
     progress_percent INTEGER NOT NULL DEFAULT 0,
     error_message TEXT,
+    summary_details JSON,
     started_at TIMESTAMP,
     completed_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS ix_processing_jobs_document_id ON processing_jobs(document_id);
 CREATE INDEX IF NOT EXISTS ix_processing_jobs_status ON processing_jobs(status);
+
 
 -- 10. Document Metadata Table (Entity 9)
 CREATE TABLE IF NOT EXISTS document_metadata (

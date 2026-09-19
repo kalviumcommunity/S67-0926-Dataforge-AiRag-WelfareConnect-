@@ -76,7 +76,10 @@ export default function HomePage() {
         <HeroSearch
           collections={collections}
           onCitationClick={(citation) => setActiveCitation(citation)}
+          user={user}
+          token={token}
         />
+
 
         {/* Role-Specific Protected Consoles */}
         {isHelpdeskUser && token && <HelpdeskToolbar token={token} />}
