@@ -2,22 +2,29 @@
 
 import React, { useState } from 'react';
 import ApiService from '../lib/api';
-import { Citation, Collection, QueryResponse } from '../lib/types';
+import { Citation, Collection, QueryResponse, User } from '../lib/types';
 
 interface HeroSearchProps {
   collections: Collection[];
   onCitationClick: (citation: Citation) => void;
+  user?: User | null;
+  token?: string | null;
 }
 
 export const HeroSearch: React.FC<HeroSearchProps> = ({
   collections,
   onCitationClick,
+  user,
+  token,
 }) => {
   const [query, setQuery] = useState('');
   const [selectedCollection, setSelectedCollection] = useState<string>('');
+  const [includeHistorical, setIncludeHistorical] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const isAdmin = user && (user.role === 'SYSTEM_ADMIN' || user.role === 'SCHEME_ADMIN');
 
   const sampleQueries = [
     'What is the maximum income limit for PMAY-U housing subsidy?',
@@ -34,7 +41,9 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
     try {
       const response = await ApiService.executeQuery(
         q,
-        selectedCollection || undefined
+        selectedCollection || undefined,
+        token || undefined,
+        isAdmin ? includeHistorical : false
       );
       setResult(response);
     } catch (err: any) {
@@ -48,7 +57,7 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
     <section className="hero-section">
       <div className="hero-badge">
         <span>⚡</span>
-        <span>Grounded Scheme Intelligence with Exact Page Citations</span>
+        <span>Grounded Scheme Intelligence with Exact Page & Version Citations</span>
       </div>
 
       <h1 className="hero-title">
@@ -57,7 +66,7 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
 
       <p className="hero-description">
         Ask natural-language questions across official government guidelines, circulars, and gazettes.
-        Every answer is strictly grounded in verified source PDFs with document and page numbers.
+        Every answer is strictly grounded in verified source PDFs with document name, active version, and page numbers.
       </p>
 
       {/* Search Input Box */}
@@ -69,7 +78,7 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
             onChange={(e) => setSelectedCollection(e.target.value)}
             aria-label="Filter by Scheme Collection"
           >
-            <option value="">All Uploaded Schemes</option>
+            <option value="">All Active Schemes</option>
             {collections.map((col) => (
               <option key={col.id} value={col.id}>
                 {col.name}
@@ -94,6 +103,21 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
             {loading ? 'Searching...' : 'Search Scheme'}
           </button>
         </div>
+
+        {/* Administrator Historical Search Toggle */}
+        {isAdmin && (
+          <div style={{ marginTop: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#9a3412', background: '#ffedd5', padding: '0.35rem 0.75rem', borderRadius: 'var(--radius-sm)', width: 'fit-content' }}>
+            <input
+              type="checkbox"
+              id="historical-search-toggle"
+              checked={includeHistorical}
+              onChange={(e) => setIncludeHistorical(e.target.checked)}
+            />
+            <label htmlFor="historical-search-toggle" style={{ cursor: 'pointer', fontWeight: 600 }}>
+              🛡️ Admin Mode: Search Historical & Archived Guidelines
+            </label>
+          </div>
+        )}
 
         {/* Sample Query Chips */}
         <div className="sample-chips">
@@ -152,14 +176,19 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
 
           {result.citations.length > 0 && (
             <div className="citations-container">
-              <div className="citations-label">Verified Official Source Citations</div>
-              <div>
+              <div className="citations-label">Verified Official Source Citations (Active Version Grounding)</div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 {result.citations.map((c, idx) => (
                   <button
                     key={idx}
                     className="citation-badge"
                     onClick={() => onCitationClick(c)}
                     title="Click to preview official PDF page excerpt"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                    }}
                   >
                     <span>📄</span>
                     <span>

@@ -4,7 +4,7 @@ Audit logging service for tracking administrative events and data access.
 
 from typing import Any, Dict, Optional
 from sqlalchemy.orm import Session
-from backend.app.models.db_models import AuditLog
+from backend.app.models.db_models import AuditEvent
 
 
 class AuditService:
@@ -17,14 +17,14 @@ class AuditService:
         entity_id: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
         ip_address: Optional[str] = None,
-    ) -> AuditLog:
+    ) -> AuditEvent:
         """Create and persist an immutable audit record."""
-        audit_entry = AuditLog(
+        audit_entry = AuditEvent(
             user_id=user_id,
-            action=action,
-            entity_type=entity_type,
+            action_type=action,
+            entity_table=entity_type,
             entity_id=entity_id,
-            details=details or {},
+            metadata_json=details or {},
             ip_address=ip_address,
         )
         db.add(audit_entry)

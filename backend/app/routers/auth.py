@@ -1,8 +1,8 @@
 """
 Authentication and User Access Endpoints.
-Preserves Prompt 05 RBAC roles and registration/login behaviors.
 """
 
+from typing import Dict
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from backend.app.core.dependencies import get_current_user, require_roles
@@ -42,13 +42,25 @@ def register_citizen(
     req: Request,
     db: Session = Depends(get_db),
 ) -> AuthSessionResponse:
-    """Public citizen account registration."""
+    """Public citizen account self-registration."""
     client_ip = req.client.host if req.client else "127.0.0.1"
     return AuthService.register_citizen(
         db=db,
         request=request,
         ip_address=client_ip,
     )
+
+
+@router.post("/logout", response_model=Dict[str, str])
+def logout(
+    req: Request,
+    current_user: UserOut = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, str]:
+    """Logout current authenticated user session."""
+    client_ip = req.client.host if req.client else "127.0.0.1"
+    AuthService.logout(db=db, user_id=current_user.id, ip_address=client_ip)
+    return {"status": "success", "message": "Successfully logged out."}
 
 
 @router.post("/staff", response_model=UserOut)
