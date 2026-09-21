@@ -263,21 +263,67 @@ class PageOut(BaseModel):
 class CitationOut(BaseModel):
     document_id: str
     document_title: str
+    version_id: Optional[str] = None
+    version_number: Optional[int] = 1
     page_number: int
+    page_range: Optional[str] = "1"
+    section_heading: Optional[str] = None
     excerpt: str
     score: float
-    version_number: Optional[int] = 1
+    retrieval_reason: Optional[str] = None
     status: Optional[str] = "ACTIVE"
     is_historical: Optional[bool] = False
+    department: Optional[str] = None
+    state_or_district: Optional[str] = None
+    language: Optional[str] = None
+    effective_date: Optional[str] = None
+
+
+class InformationType(str, Enum):
+    ELIGIBILITY = "eligibility"
+    BENEFIT = "benefit"
+    DOCUMENTS = "documents"
+    PROCESS = "process"
+    DEADLINE = "deadline"
+    CONTACT = "contact"
+    STATUS = "status"
+    GENERAL = "general"
+
+
+class QueryUnderstandingResult(BaseModel):
+    raw_query: str
+    scheme_category: Optional[str] = None
+    beneficiary_type: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    income_range: Optional[str] = None
+    max_income: Optional[float] = None
+    occupation: Optional[str] = None
+    state_or_district: Optional[str] = None
+    locality: Optional[str] = None
+    disability_status: Optional[str] = None
+    profile_terms: List[str] = Field(default_factory=list)
+    information_type: Optional[InformationType] = None
+    follow_up_question: Optional[str] = None
+    is_safe_to_answer: bool = True
+    missing_critical_fields: List[str] = Field(default_factory=list)
+    extracted_entities: Dict[str, Any] = Field(default_factory=dict)
+    confidence: float = 1.0
 
 
 class QueryRequest(BaseModel):
     query: str = Field(min_length=3, max_length=500)
     collection_id: Optional[str] = None
-    document_ids: Optional[List[str]] = None
+    scheme: Optional[str] = None
+    scheme_name: Optional[str] = None
+    department: Optional[str] = None
+    state_or_district: Optional[str] = None
+    language: Optional[str] = None
+    active_only: Optional[bool] = True
     include_historical: Optional[bool] = False
     include_archived: Optional[bool] = False
-
+    limit: Optional[int] = 5
+    document_ids: Optional[List[str]] = None
 
 
 class QueryResponse(BaseModel):
@@ -285,6 +331,8 @@ class QueryResponse(BaseModel):
     answer: str
     citations: List[CitationOut] = []
     is_refusal: bool = False
+    follow_up_question: Optional[str] = None
+    query_understanding: Optional[QueryUnderstandingResult] = None
     disclaimer: str = (
         "Informational purpose only. Does not constitute official legal eligibility "
         "determination. Refer to the cited official document for authoritative guidance."

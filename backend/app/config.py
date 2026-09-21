@@ -46,13 +46,16 @@ class Settings(BaseSettings):
     PINECONE_API_KEY: str = "placeholder-pinecone-api-key"
     PINECONE_ENVIRONMENT: str = "us-east-1"
     PINECONE_INDEX_NAME: str = "welfareconnect-schemes-index"
+    PINECONE_NAMESPACE_PREFIX: str = "welfareconnect"
     PINECONE_DIMENSION: int = 1536
     PINECONE_METRIC: str = "cosine"
 
     # AI & Embeddings
     OPENAI_API_KEY: str = "placeholder-openai-api-key"
     EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSION: int = 1536
     CHAT_COMPLETION_MODEL: str = "gpt-4o-mini"
+    SEARCH_SIMILARITY_THRESHOLD: float = 0.50
 
     # Task Queue / Redis
     REDIS_URL: str = "redis://localhost:6379/0"

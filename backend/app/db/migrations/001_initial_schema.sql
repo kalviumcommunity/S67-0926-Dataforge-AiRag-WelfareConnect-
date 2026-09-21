@@ -136,16 +136,25 @@ CREATE TABLE IF NOT EXISTS extracted_chunks (
     version_id VARCHAR(36) NOT NULL REFERENCES document_versions(id) ON DELETE CASCADE,
     document_id VARCHAR(36) NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     chunk_index INTEGER NOT NULL,
+    page_number INTEGER NOT NULL DEFAULT 1,
+    page_range VARCHAR(50) DEFAULT '1',
+    section_heading VARCHAR(255),
     chunk_text TEXT NOT NULL,
+    normalized_text TEXT,
     token_count INTEGER NOT NULL DEFAULT 0,
     start_char_offset INTEGER NOT NULL DEFAULT 0,
     end_char_offset INTEGER NOT NULL DEFAULT 0,
+    metadata_json JSON,
     vector_id VARCHAR(100),
+    embedding_model VARCHAR(100) DEFAULT 'text-embedding-3-small',
+    embedding_dimension INTEGER DEFAULT 1536,
+    indexed_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS ix_extracted_chunks_page_id ON extracted_chunks(page_id);
 CREATE INDEX IF NOT EXISTS ix_extracted_chunks_version_id ON extracted_chunks(version_id);
 CREATE INDEX IF NOT EXISTS ix_extracted_chunks_document_id ON extracted_chunks(document_id);
+CREATE INDEX IF NOT EXISTS ix_extracted_chunks_page_number ON extracted_chunks(page_number);
 CREATE INDEX IF NOT EXISTS ix_extracted_chunks_vector_id ON extracted_chunks(vector_id);
 
 -- 9. Processing Jobs Table (Entity 8)

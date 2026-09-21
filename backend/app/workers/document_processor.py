@@ -12,10 +12,11 @@ import re
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import pypdf
 from backend.app.config import settings
 from backend.app.services.ocr_service import OcrResult, ocr_service
+from backend.app.workers.chunker import SemanticChunk, SemanticChunker
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +24,15 @@ logger = logging.getLogger(__name__)
 class ProcessedChunk(BaseModel):
     chunk_index: int
     page_number: int
-    chunk_text: str
-    token_count: int
-    start_char_offset: int
-    end_char_offset: int
+    page_range: str = "1"
+    section_heading: Optional[str] = None
+    chunk_text: str  # Verbatim exact text for citation display
+    normalized_text: Optional[str] = None  # Cleaned / normalized text for search
+    token_count: int = 0
+    word_count: int = 0
+    start_char_offset: int = 0
+    end_char_offset: int = 0
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ProcessedPage(BaseModel):
@@ -189,62 +195,40 @@ class DocumentProcessor:
         page_number: int,
         text: str,
         start_chunk_index: int = 0,
-        max_words_per_chunk: int = 250,
-        overlap_words: int = 30,
+        page_range: Optional[str] = None,
+        max_words_per_chunk: int = 350,
+        overlap_words: int = 40,
+        metadata_context: Optional[Dict[str, Any]] = None,
     ) -> List[ProcessedChunk]:
         """
-        Divide page text into semantic chunks bounded by headings and paragraph boundaries.
+        Divide page text into semantic chunks bounded by headings, tables, and paragraph boundaries.
+        Utilizes SemanticChunker for structural integrity and search normalization.
         """
-        if not text.strip():
-            return []
-
-        # Split by paragraph boundaries
-        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-        chunks: List[ProcessedChunk] = []
-        current_chunk_words: List[str] = []
-        current_offset = 0
-        chunk_idx = start_chunk_index
-
-        for para in paragraphs:
-            para_words = para.split()
-            if len(current_chunk_words) + len(para_words) <= max_words_per_chunk:
-                current_chunk_words.extend(para_words)
-            else:
-                if current_chunk_words:
-                    chunk_text = " ".join(current_chunk_words)
-                    token_est = max(1, int(len(current_chunk_words) * 1.3))
-                    chunks.append(
-                        ProcessedChunk(
-                            chunk_index=chunk_idx,
-                            page_number=page_number,
-                            chunk_text=chunk_text,
-                            token_count=token_est,
-                            start_char_offset=current_offset,
-                            end_char_offset=current_offset + len(chunk_text),
-                        )
-                    )
-                    chunk_idx += 1
-                    current_offset += len(chunk_text) + 1
-                    # Keep overlap
-                    current_chunk_words = current_chunk_words[-overlap_words:] + para_words
-                else:
-                    current_chunk_words = para_words
-
-        if current_chunk_words:
-            chunk_text = " ".join(current_chunk_words)
-            token_est = max(1, int(len(current_chunk_words) * 1.3))
-            chunks.append(
-                ProcessedChunk(
-                    chunk_index=chunk_idx,
-                    page_number=page_number,
-                    chunk_text=chunk_text,
-                    token_count=token_est,
-                    start_char_offset=current_offset,
-                    end_char_offset=current_offset + len(chunk_text),
-                )
+        semantic_chunks = SemanticChunker.chunk_page(
+            page_number=page_number,
+            text=text,
+            start_chunk_index=start_chunk_index,
+            page_range=page_range,
+            max_words=max_words_per_chunk,
+            overlap_words=overlap_words,
+            metadata_context=metadata_context,
+        )
+        return [
+            ProcessedChunk(
+                chunk_index=c.chunk_index,
+                page_number=c.page_number,
+                page_range=c.page_range,
+                section_heading=c.section_heading,
+                chunk_text=c.chunk_text,
+                normalized_text=c.normalized_text,
+                token_count=c.token_count,
+                word_count=c.word_count,
+                start_char_offset=c.start_char_offset,
+                end_char_offset=c.end_char_offset,
+                metadata=c.metadata,
             )
-
-        return chunks
+            for c in semantic_chunks
+        ]
 
     @classmethod
     def process_document_bytes(

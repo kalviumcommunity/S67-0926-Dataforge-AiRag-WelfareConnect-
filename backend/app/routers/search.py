@@ -16,11 +16,25 @@ from backend.app.models.schemas import (
     QueryHistoryItem,
     QueryRequest,
     QueryResponse,
+    QueryUnderstandingResult,
     UserOut,
 )
+from backend.app.services.query_understanding import query_understanding_service
 from backend.app.services.search_service import SearchService
 
 router = APIRouter(prefix="/query", tags=["Search & RAG"])
+
+
+@router.post("/understand", response_model=QueryUnderstandingResult)
+def understand_query(
+    request: QueryRequest,
+) -> QueryUnderstandingResult:
+    """
+    Perform pre-retrieval query understanding, entity extraction, schema validation,
+    and follow-up question generation for missing safety fields.
+    Open to Public, Citizens, Helpdesk, and Administrators.
+    """
+    return query_understanding_service.understand_query(request.query)
 
 
 @router.post("/search", response_model=QueryResponse)

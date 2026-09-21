@@ -20,7 +20,7 @@ from backend.app.models.db_models import (
     ExtractedChunk,
     ProcessingJob,
 )
-from backend.app.services.indexing_service import indexing_service
+from backend.app.services.indexing_service import IndexingService, indexing_service
 from backend.app.services.storage_service import storage_service
 from backend.app.workers.document_processor import DocumentProcessor, ProcessingPipelineResult
 
@@ -148,31 +148,68 @@ class DocumentProcessingOrchestrator:
                     session.flush()  # Get db_page.id
 
                     for c in p.chunks:
-                        vec_id = f"vec-{document_id[:8]}-v{ver.version_number}-p{p.page_number:03d}-c{c.chunk_index:03d}"
+                        vec_id = IndexingService.generate_vector_id(
+                            version_id=version_id,
+                            page_number=p.page_number,
+                            chunk_index=c.chunk_index,
+                        )
+                        chunk_meta = {
+                            "collection_id": str(doc.collection_id),
+                            "document_id": str(doc.id),
+                            "document_version_id": str(ver.id),
+                            "version_id": str(ver.id),
+                            "page_number": int(p.page_number),
+                            "page_range": str(c.page_range or p.page_number),
+                            "scheme": str(doc.scheme_name),
+                            "scheme_name": str(doc.scheme_name),
+                            "department": str(doc.department),
+                            "state_or_district": str(doc.state_or_district),
+                            "language": str(doc.language),
+                            "effective_date": str(ver.effective_date or doc.effective_date) if (ver.effective_date or doc.effective_date) else None,
+                            "active": bool(ver.status == DocumentStatus.ACTIVE.value or doc.status == DocumentStatus.ACTIVE.value),
+                            "is_active": bool(ver.status == DocumentStatus.ACTIVE.value or doc.status == DocumentStatus.ACTIVE.value),
+                            "embedding_model": str(settings.EMBEDDING_MODEL),
+                            "embedding_dimension": int(settings.EMBEDDING_DIMENSION),
+                            "chunk_index": int(c.chunk_index),
+                            "section_heading": str(c.section_heading or ""),
+                            "extraction_method": str(p.extraction_method),
+                        }
+                        # Merge any existing chunk-level metadata
+                        if hasattr(c, "metadata") and c.metadata:
+                            chunk_meta.update(c.metadata)
+
+                        now_dt = datetime.utcnow()
                         db_chunk = ExtractedChunk(
                             page_id=db_page.id,
                             version_id=version_id,
                             document_id=document_id,
                             chunk_index=c.chunk_index,
+                            page_number=c.page_number,
+                            page_range=c.page_range,
+                            section_heading=c.section_heading,
                             chunk_text=c.chunk_text,
+                            normalized_text=c.normalized_text,
                             token_count=c.token_count,
                             start_char_offset=c.start_char_offset,
                             end_char_offset=c.end_char_offset,
+                            metadata_json=chunk_meta,
                             vector_id=vec_id,
+                            embedding_model=settings.EMBEDDING_MODEL,
+                            embedding_dimension=settings.EMBEDDING_DIMENSION,
+                            indexed_at=now_dt,
                         )
                         session.add(db_chunk)
                         chunk_payloads_for_indexing.append({
                             "chunk_id": db_chunk.id,
                             "page_number": p.page_number,
+                            "page_range": c.page_range,
+                            "section_heading": c.section_heading,
                             "chunk_index": c.chunk_index,
                             "chunk_text": c.chunk_text,
+                            "normalized_text": c.normalized_text,
                             "token_count": c.token_count,
                             "vector_id": vec_id,
-                            "metadata": {
-                                "scheme_name": doc.scheme_name,
-                                "department": doc.department,
-                                "extraction_method": p.extraction_method,
-                            }
+                            "metadata": chunk_meta,
                         })
 
                 session.commit()
@@ -185,6 +222,7 @@ class DocumentProcessingOrchestrator:
                     document_id=document_id,
                     version_id=version_id,
                     chunks=chunk_payloads_for_indexing,
+                    collection_id=doc.collection_id,
                 )
 
                 # 8. Mark job & document status as COMPLETED / ACTIVE

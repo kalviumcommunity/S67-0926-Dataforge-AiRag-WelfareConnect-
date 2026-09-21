@@ -36,6 +36,14 @@ class DatabaseMigrator:
                 "ALTER TABLE document_pages ADD COLUMN requires_admin_review BOOLEAN DEFAULT 0",
                 "ALTER TABLE document_pages ADD COLUMN review_reason VARCHAR(255)",
                 "ALTER TABLE processing_jobs ADD COLUMN summary_details JSON",
+                "ALTER TABLE extracted_chunks ADD COLUMN page_number INTEGER DEFAULT 1",
+                "ALTER TABLE extracted_chunks ADD COLUMN page_range VARCHAR(50) DEFAULT '1'",
+                "ALTER TABLE extracted_chunks ADD COLUMN section_heading VARCHAR(255)",
+                "ALTER TABLE extracted_chunks ADD COLUMN normalized_text TEXT",
+                "ALTER TABLE extracted_chunks ADD COLUMN metadata_json JSON",
+                "ALTER TABLE extracted_chunks ADD COLUMN embedding_model VARCHAR(100) DEFAULT 'text-embedding-3-small'",
+                "ALTER TABLE extracted_chunks ADD COLUMN embedding_dimension INTEGER DEFAULT 1536",
+                "ALTER TABLE extracted_chunks ADD COLUMN indexed_at TIMESTAMP",
             ]
             for alter_sql in alter_statements:
                 try:

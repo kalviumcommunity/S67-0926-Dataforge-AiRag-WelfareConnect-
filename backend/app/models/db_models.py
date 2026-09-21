@@ -241,11 +241,19 @@ class ExtractedChunk(Base):
     version_id = Column(String(36), ForeignKey("document_versions.id"), nullable=False, index=True)
     document_id = Column(String(36), ForeignKey("documents.id"), nullable=False, index=True)
     chunk_index = Column(Integer, nullable=False)
-    chunk_text = Column(Text, nullable=False)
+    page_number = Column(Integer, default=1, nullable=False, index=True)
+    page_range = Column(String(50), default="1", nullable=True)
+    section_heading = Column(String(255), nullable=True)
+    chunk_text = Column(Text, nullable=False)  # Verbatim exact text for citation display
+    normalized_text = Column(Text, nullable=True)  # Cleaned/normalized text for search
     token_count = Column(Integer, default=0, nullable=False)
     start_char_offset = Column(Integer, default=0, nullable=False)
     end_char_offset = Column(Integer, default=0, nullable=False)
+    metadata_json = Column(JSON, nullable=True)
     vector_id = Column(String(100), nullable=True, index=True)  # Pinecone Vector ID
+    embedding_model = Column(String(100), default="text-embedding-3-small", nullable=True)
+    embedding_dimension = Column(Integer, default=1536, nullable=True)
+    indexed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     page = relationship("DocumentPage", back_populates="chunks")
