@@ -136,7 +136,10 @@ def test_active_version_search_and_historical_search_access_control(client: Test
     # 2. Public / Citizen Search returns active version in citations
     search_res = client.post(
         "/api/v1/query/search",
-        json={"query": "What is PMAY-U housing subsidy limit?"},
+        json={
+            "query": "What is PMAY-U housing subsidy limit?",
+            "collection_id": "col-0000000-0000-4000-8000-000000000001",
+        },
     )
     assert search_res.status_code == 200
     data = search_res.json()
@@ -149,7 +152,11 @@ def test_active_version_search_and_historical_search_access_control(client: Test
     unauth_hist = client.post(
         "/api/v1/query/search",
         headers={"Authorization": f"Bearer {citizen_token}"},
-        json={"query": "What is PMAY-U housing subsidy limit?", "include_historical": True},
+        json={
+            "query": "What is PMAY-U housing subsidy limit?",
+            "collection_id": "col-0000000-0000-4000-8000-000000000001",
+            "include_historical": True,
+        },
     )
     assert unauth_hist.status_code == 403
     assert "restricted to administrators" in unauth_hist.json()["detail"]
@@ -157,7 +164,11 @@ def test_active_version_search_and_historical_search_access_control(client: Test
     # Anonymous user attempting historical search receives 403 Forbidden
     anon_hist = client.post(
         "/api/v1/query/search",
-        json={"query": "What is PMAY-U housing subsidy limit?", "include_historical": True},
+        json={
+            "query": "What is PMAY-U housing subsidy limit?",
+            "collection_id": "col-0000000-0000-4000-8000-000000000001",
+            "include_historical": True,
+        },
     )
     assert anon_hist.status_code == 403
 
@@ -165,7 +176,11 @@ def test_active_version_search_and_historical_search_access_control(client: Test
     admin_hist = client.post(
         "/api/v1/query/search",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"query": "What is PMAY-U housing subsidy limit?", "include_historical": True},
+        json={
+            "query": "What is PMAY-U housing subsidy limit?",
+            "collection_id": "col-0000000-0000-4000-8000-000000000001",
+            "include_historical": True,
+        },
     )
     assert admin_hist.status_code == 200
     assert len(admin_hist.json()["citations"]) > 0

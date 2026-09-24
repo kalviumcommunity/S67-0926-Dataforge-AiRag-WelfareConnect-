@@ -102,13 +102,16 @@ class DocumentCollection(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     department_id = Column(String(36), ForeignKey("departments.id"), nullable=True)
+    owner_user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     name = Column(String(255), nullable=False)
     slug = Column(String(100), unique=True, nullable=False, index=True)
     description = Column(Text, nullable=True)
+    is_private = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    owner = relationship("User", foreign_keys=[owner_user_id])
     department_rel = relationship("Department", back_populates="collections")
     documents = relationship("Document", back_populates="collection", cascade="all, delete-orphan")
     search_sessions = relationship("SearchSession", back_populates="collection")

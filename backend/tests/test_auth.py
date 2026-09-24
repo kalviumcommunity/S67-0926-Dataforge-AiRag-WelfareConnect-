@@ -49,7 +49,10 @@ def test_citizen_registration_and_login(client: TestClient):
     search_res = client.post(
         "/api/v1/query/search",
         headers={"Authorization": f"Bearer {token}"},
-        json={"query": "What is PMAY-U income limit?"},
+        json={
+            "query": "What is PMAY-U income limit?",
+            "collection_id": "col-0000000-0000-4000-8000-000000000001",
+        },
     )
     assert search_res.status_code == 200
 

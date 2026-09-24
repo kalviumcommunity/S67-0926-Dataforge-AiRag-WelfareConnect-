@@ -22,6 +22,7 @@ from backend.app.config import settings
 from backend.app.models.db_models import (
     Citation,
     Document,
+    DocumentCollection,
     DocumentStatus,
     DocumentVersion,
     ExtractedChunk,
@@ -30,6 +31,7 @@ from backend.app.models.db_models import (
 )
 from backend.app.models.schemas import CitationOut, QueryRequest, QueryResponse, UserOut
 from backend.app.services.embedding_service import embedding_service
+from backend.app.services.generation_service import generation_service
 from backend.app.services.keyword_search import keyword_search_service
 from backend.app.services.pinecone_service import pinecone_service
 from backend.app.services.query_understanding import query_understanding_service
@@ -57,6 +59,13 @@ class SearchService:
         if not query_text:
             return []
 
+        if not request.collection_id or not request.collection_id.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Every search request must include an authorized collection_id.",
+            )
+
+        coll_id = request.collection_id.strip()
         is_historical = bool(request.include_historical or request.include_archived)
         active_only = bool(request.active_only and not is_historical)
         limit = request.limit or 5
@@ -68,7 +77,7 @@ class SearchService:
         keyword_results = keyword_search_service.search(
             db=db,
             query=query_text,
-            collection_id=request.collection_id,
+            collection_id=coll_id,
             scheme=scheme_filter,
             department=request.department,
             state_or_district=request.state_or_district,
@@ -83,9 +92,9 @@ class SearchService:
         query_vector = embedding_service.create_embedding(query_text)
 
         # Build Pinecone metadata filter
-        pinecone_filter: Dict[str, Any] = {}
-        if request.collection_id:
-            pinecone_filter["collection_id"] = request.collection_id
+        pinecone_filter: Dict[str, Any] = {
+            "collection_id": coll_id,
+        }
         if scheme_filter:
             pinecone_filter["scheme"] = scheme_filter
         if request.department:
@@ -95,7 +104,7 @@ class SearchService:
         if active_only:
             pinecone_filter["active"] = True
 
-        namespace = pinecone_service.get_namespace(request.collection_id)
+        namespace = pinecone_service.get_namespace(coll_id)
         vector_matches = pinecone_service.query_vectors(
             vector=query_vector,
             top_k=limit * 3,
@@ -187,8 +196,8 @@ class SearchService:
         scored_citations: List[CitationOut] = []
 
         for cand in candidates.values():
-            # Apply Post-Filters: collection_id, scheme, department, state_or_district, language
-            if request.collection_id and cand["collection_id"] and cand["collection_id"] != request.collection_id:
+            # Apply Post-Filters: strict collection_id isolation, scheme, department, state_or_district, language
+            if cand.get("collection_id") != coll_id:
                 continue
             if scheme_filter and scheme_filter.lower() not in cand["scheme_name"].lower():
                 continue
@@ -235,9 +244,7 @@ class SearchService:
                 if db_ver:
                     ver_num = db_ver.version_number
 
-            doc_title = cand["scheme_name"]
-            if ver_num > 1:
-                doc_title = f"{cand['scheme_name']} (v{ver_num})"
+            doc_title = f"{cand['scheme_name']} (v{ver_num})"
 
             citation = CitationOut(
                 document_id=cand["document_id"] or "doc-unknown",
@@ -293,7 +300,38 @@ class SearchService:
         if not request.state_or_district and understanding.state_or_district:
             request.state_or_district = understanding.state_or_district
 
-        # 1. Historical Search Authorization Check
+        # 1. Collection ID Validation & Authorization
+        if not request.collection_id or not request.collection_id.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Every search request must include an authorized collection_id.",
+            )
+
+        coll_id = request.collection_id.strip()
+        collection = db.query(DocumentCollection).filter(DocumentCollection.id == coll_id).first()
+        if not collection or not collection.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Collection '{coll_id}' not found or inactive.",
+            )
+
+        # Check authorization on private collection
+        if getattr(collection, "is_private", False):
+            if not current_user:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: You do not have permission to access this private collection.",
+                )
+            user_perms = set(current_user.permissions or [])
+            is_admin = "admin:all" in user_perms or "docs:all" in user_perms or "collections:manage" in user_perms
+            is_owner = (collection.owner_user_id == current_user.id)
+            if not (is_admin or is_owner):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: You do not have permission to access this private collection.",
+                )
+
+        # 2. Historical Search Authorization Check
         if is_historical:
             user_perms = set(current_user.permissions) if current_user else set()
             is_admin = (
@@ -307,43 +345,49 @@ class SearchService:
                     detail="Historical search across archived documents is restricted to administrators.",
                 )
 
-        # 2. Run Hybrid Search (Keyword + Pinecone)
+        # 3. Run Hybrid Search (Keyword + Pinecone) strictly scoped to collection
         citations = cls.hybrid_search(db=db, request=request, current_user=current_user)
 
-        # 3. Determine Grounded Answer or Zero-Hallucination Refusal
-        if not citations:
-            is_refusal = True
-            if understanding.follow_up_question and not understanding.is_safe_to_answer:
-                answer = (
-                    f"To evaluate your eligibility safely without guessing: {understanding.follow_up_question}"
-                )
-            else:
-                answer = (
-                    "The requested information is not found in the uploaded official scheme documents. "
-                    "Please consult the nearest official department counter or authorized helpdesk."
-                )
-        else:
-            is_refusal = False
-            top_cit = citations[0]
-            if understanding.follow_up_question and not understanding.is_safe_to_answer:
-                answer = (
-                    f"Based on official scheme circulars for '{request.query}': "
-                    f"Under {top_cit.document_title}, Page {top_cit.page_number} "
-                    f"[{top_cit.section_heading or 'General Guidelines'}]: {top_cit.excerpt.strip()} "
-                    f"[Source: {top_cit.document_title}, Page {top_cit.page_number}]. "
-                    f"Note: To determine your personal eligibility safely: {understanding.follow_up_question}"
-                )
-            else:
-                answer = (
-                    f"Based on official scheme circulars for '{request.query}': "
-                    f"Under {top_cit.document_title}, Page {top_cit.page_number} "
-                    f"[{top_cit.section_heading or 'General Guidelines'}]: {top_cit.excerpt.strip()} "
-                    f"[Source: {top_cit.document_title}, Page {top_cit.page_number}]."
-                )
+        # 4. Generate Grounded Answer via GenerationService
+        gen_result = generation_service.generate_grounded_answer(
+            query=request.query,
+            passages=citations,
+            collection_name=collection.name,
+            follow_up_question=understanding.follow_up_question,
+            is_safe_to_answer=understanding.is_safe_to_answer,
+        )
+
+        # 5. Post-Generation Citation Validation & Grounding Reconciliation
+        final_answer = gen_result.answer
+        final_citations = gen_result.citations
+        grounding_verified = gen_result.grounding_verified
+        verification_warning = None
+        validation_report = None
+
+        if not gen_result.is_refusal and final_citations:
+            from backend.app.services.citation_validator import citation_validator
+
+            (
+                final_answer,
+                final_citations,
+                grounding_verified,
+                verification_warning,
+                validation_report,
+            ) = citation_validator.validate_and_reconcile_answer(
+                db=db,
+                query=request.query,
+                answer=gen_result.answer,
+                citations=gen_result.citations,
+                selected_collection_id=collection.id,
+                current_user=current_user,
+                include_historical=is_historical,
+                retrieved_passages=citations,
+                collection_name=collection.name,
+            )
 
         latency_ms = int((time.time() - start_time) * 1000)
 
-        # 4. Log Session & QA Analytics
+        # 6. Log Session & QA Analytics
         try:
             sess = None
             if session_id:
@@ -351,7 +395,7 @@ class SearchService:
                 if not sess:
                     sess = SearchSession(
                         session_token=session_id,
-                        collection_id=request.collection_id,
+                        collection_id=collection.id,
                     )
                     db.add(sess)
                     db.commit()
@@ -359,18 +403,18 @@ class SearchService:
 
             qa_log = QuestionAnswer(
                 session_id=sess.id if sess else None,
-                collection_id=request.collection_id,
+                collection_id=collection.id,
                 question=request.query,
-                answer=answer,
+                answer=final_answer,
                 latency_ms=latency_ms,
-                is_refusal=is_refusal,
+                is_refusal=gen_result.is_refusal,
             )
             db.add(qa_log)
             db.commit()
             db.refresh(qa_log)
 
             # Persist relational citations
-            for c in citations:
+            for c in final_citations:
                 doc_rec = db.query(Document).filter(Document.id == c.document_id).first()
                 if doc_rec:
                     db_cit = Citation(
@@ -389,9 +433,14 @@ class SearchService:
 
         return QueryResponse(
             qa_id=qa_log.id if 'qa_log' in locals() and qa_log else None,
-            answer=answer,
-            citations=citations,
-            is_refusal=is_refusal,
+            collection_id=collection.id,
+            answer=final_answer,
+            citations=final_citations,
+            is_refusal=gen_result.is_refusal,
+            insufficient_evidence=gen_result.insufficient_evidence,
+            grounding_verified=grounding_verified,
+            verification_warning=verification_warning,
+            validation_report=validation_report,
             follow_up_question=understanding.follow_up_question,
             query_understanding=understanding,
             latency_ms=latency_ms,
