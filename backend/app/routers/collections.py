@@ -2,10 +2,10 @@
 Document Collection Endpoints.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
-from backend.app.core.dependencies import require_permissions, require_roles
+from backend.app.core.dependencies import get_optional_user, require_permissions, require_roles
 from backend.app.db.session import get_db
 from backend.app.models.schemas import CollectionCreate, CollectionOut, UserOut, UserRole
 from backend.app.services.document_service import DocumentService
@@ -14,9 +14,12 @@ router = APIRouter(prefix="/collections", tags=["Collections"])
 
 
 @router.get("", response_model=List[CollectionOut])
-def list_collections(db: Session = Depends(get_db)) -> List[CollectionOut]:
-    """List all active public scheme document collections."""
-    return DocumentService.list_collections(db)
+def list_collections(
+    current_user: Optional[UserOut] = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+) -> List[CollectionOut]:
+    """List all active accessible scheme document collections."""
+    return DocumentService.list_collections(db, current_user=current_user)
 
 
 @router.post("", response_model=CollectionOut)

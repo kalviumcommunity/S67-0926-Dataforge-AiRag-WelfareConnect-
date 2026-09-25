@@ -28,6 +28,7 @@ from backend.app.models.schemas import (
     DocumentVersionStatus,
     PageOut,
     ProcessingSummaryOut,
+    UserOut,
 )
 from backend.app.services.audit_service import AuditService
 from backend.app.services.storage_service import storage_service
@@ -67,9 +68,23 @@ def _generate_sample_pdf(scheme_name: str, department: str, version_number: int 
 
 class DocumentService:
     @staticmethod
-    def list_collections(db: Session) -> List[CollectionOut]:
-        """List all active scheme collections."""
-        collections = db.query(DocumentCollection).filter(DocumentCollection.is_active.is_(True)).all()
+    def list_collections(db: Session, current_user: Optional[UserOut] = None) -> List[CollectionOut]:
+        """List all active accessible scheme collections."""
+        query = db.query(DocumentCollection).filter(DocumentCollection.is_active.is_(True))
+        
+        is_admin = False
+        if current_user and current_user.permissions:
+            is_admin = "admin:all" in current_user.permissions or "collections:manage" in current_user.permissions
+
+        if not is_admin:
+            if current_user:
+                query = query.filter(
+                    (DocumentCollection.is_private.is_(False)) | (DocumentCollection.owner_user_id == current_user.id)
+                )
+            else:
+                query = query.filter(DocumentCollection.is_private.is_(False))
+
+        collections = query.all()
         results = []
         for c in collections:
             doc_count = db.query(Document).filter(
@@ -84,6 +99,8 @@ class DocumentService:
                     slug=c.slug,
                     description=c.description,
                     department=dept_name,
+                    is_private=bool(c.is_private),
+                    owner_user_id=c.owner_user_id,
                     is_active=c.is_active,
                     total_documents=doc_count,
                     created_at=c.created_at,
@@ -110,6 +127,8 @@ class DocumentService:
             name=data.name,
             slug=data.slug,
             description=data.description,
+            owner_user_id=data.owner_user_id or admin_user_id,
+            is_private=bool(data.is_private),
             is_active=True,
         )
         db.add(col)
@@ -122,7 +141,7 @@ class DocumentService:
             entity_type="document_collections",
             user_id=admin_user_id,
             entity_id=col.id,
-            details={"name": col.name, "slug": col.slug},
+            details={"name": col.name, "slug": col.slug, "is_private": col.is_private},
             ip_address=ip_address,
         )
 
@@ -132,6 +151,8 @@ class DocumentService:
             slug=col.slug,
             description=col.description,
             department=None,
+            is_private=bool(col.is_private),
+            owner_user_id=col.owner_user_id,
             is_active=col.is_active,
             total_documents=0,
             created_at=col.created_at,

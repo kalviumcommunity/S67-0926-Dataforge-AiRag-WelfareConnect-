@@ -166,7 +166,7 @@ class KeywordSearchService:
         scored_results: List[KeywordSearchResult] = []
         for chunk, doc, ver in rows:
             chunk_text = chunk.chunk_text or ""
-            norm_text = chunk.normalized_text or ""
+            norm_text = chunk.normalized_text or SemanticChunker.normalize_text_for_search(chunk_text)
             heading = chunk.section_heading or ""
             scheme_name = doc.scheme_name or ""
 
@@ -187,10 +187,12 @@ class KeywordSearchService:
                 if tok.lower() in heading.lower():
                     score += 1.5
 
-            # Word / token matches in chunk body
+            # Word / token matches in chunk body, normalized text, or scheme name
             for tok in normalized_tokens:
-                if tok in norm_text:
+                if tok in norm_text or tok in chunk_text.lower():
                     score += 1.0
+                if tok in scheme_name.lower():
+                    score += 1.5
 
             # Direct substring match in verbatim text
             if cleaned_query.lower() in chunk_text.lower():

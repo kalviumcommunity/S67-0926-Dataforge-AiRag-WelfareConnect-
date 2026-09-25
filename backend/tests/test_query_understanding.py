@@ -332,6 +332,7 @@ def test_api_search_includes_query_understanding():
     """Verify POST /api/v1/query/search includes query_understanding in the response."""
     payload = {
         "query": "Am I eligible for PMAY housing loan subsidy?",
+        "collection_id": "col-0000000-0000-4000-8000-000000000001",
     }
     response = client.post("/api/v1/query/search", json=payload)
     assert response.status_code == 200

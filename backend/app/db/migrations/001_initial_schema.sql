@@ -46,15 +46,18 @@ CREATE INDEX IF NOT EXISTS ix_users_role ON users(role);
 CREATE TABLE IF NOT EXISTS document_collections (
     id VARCHAR(36) PRIMARY KEY,
     department_id VARCHAR(36) REFERENCES departments(id) ON DELETE SET NULL,
+    owner_user_id VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL,
     name VARCHAR(255) NOT NULL,
     slug VARCHAR(100) UNIQUE NOT NULL,
     description TEXT,
+    is_private BOOLEAN NOT NULL DEFAULT 0,
     is_active BOOLEAN NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS ix_document_collections_slug ON document_collections(slug);
 CREATE INDEX IF NOT EXISTS ix_document_collections_department_id ON document_collections(department_id);
+CREATE INDEX IF NOT EXISTS ix_document_collections_owner_user_id ON document_collections(owner_user_id);
 
 -- 5. Documents Table (Entity 4)
 CREATE TABLE IF NOT EXISTS documents (

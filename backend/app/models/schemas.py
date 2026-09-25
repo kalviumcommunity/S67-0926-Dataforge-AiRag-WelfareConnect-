@@ -118,6 +118,8 @@ class CollectionBase(BaseModel):
     slug: str
     description: Optional[str] = None
     department: Optional[str] = None
+    is_private: Optional[bool] = False
+    owner_user_id: Optional[str] = None
 
 
 class CollectionCreate(CollectionBase):
@@ -277,6 +279,27 @@ class CitationOut(BaseModel):
     state_or_district: Optional[str] = None
     language: Optional[str] = None
     effective_date: Optional[str] = None
+    is_verified: bool = True
+    validation_error: Optional[str] = None
+
+
+class CitationValidationItem(BaseModel):
+    citation_index: int
+    document_id: str
+    document_title: str
+    page_number: int
+    is_valid: bool
+    error_reason: Optional[str] = None
+
+
+class CitationValidationReport(BaseModel):
+    total_citations: int = 0
+    valid_citations_count: int = 0
+    invalid_citations_count: int = 0
+    has_unsupported_claims: bool = False
+    warnings: List[str] = Field(default_factory=list)
+    details: List[CitationValidationItem] = Field(default_factory=list)
+
 
 
 class InformationType(str, Enum):
@@ -328,9 +351,14 @@ class QueryRequest(BaseModel):
 
 class QueryResponse(BaseModel):
     qa_id: Optional[str] = None
+    collection_id: Optional[str] = None
     answer: str
     citations: List[CitationOut] = []
     is_refusal: bool = False
+    insufficient_evidence: bool = False
+    grounding_verified: bool = True
+    verification_warning: Optional[str] = None
+    validation_report: Optional[CitationValidationReport] = None
     follow_up_question: Optional[str] = None
     query_understanding: Optional[QueryUnderstandingResult] = None
     disclaimer: str = (
@@ -338,6 +366,7 @@ class QueryResponse(BaseModel):
         "determination. Refer to the cited official document for authoritative guidance."
     )
     latency_ms: int = 0
+
 
 
 class EligibilityCheckRequest(BaseModel):

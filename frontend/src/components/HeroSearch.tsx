@@ -36,12 +36,18 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
     const q = queryText !== undefined ? queryText : query;
     if (!q.trim()) return;
 
+    const targetColl = selectedCollection || (collections.length > 0 ? collections[0].id : '');
+    if (!targetColl) {
+      setError('Please select an authorized scheme collection to search.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       const response = await ApiService.executeQuery(
         q,
-        selectedCollection || undefined,
+        targetColl,
         token || undefined,
         isAdmin ? includeHistorical : false
       );
@@ -74,11 +80,10 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
         <div className="search-input-wrapper">
           <select
             className="search-select"
-            value={selectedCollection}
+            value={selectedCollection || (collections.length > 0 ? collections[0].id : '')}
             onChange={(e) => setSelectedCollection(e.target.value)}
             aria-label="Filter by Scheme Collection"
           >
-            <option value="">All Active Schemes</option>
             {collections.map((col) => (
               <option key={col.id} value={col.id}>
                 {col.name}

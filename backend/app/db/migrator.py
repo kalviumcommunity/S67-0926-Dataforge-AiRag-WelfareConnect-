@@ -44,6 +44,8 @@ class DatabaseMigrator:
                 "ALTER TABLE extracted_chunks ADD COLUMN embedding_model VARCHAR(100) DEFAULT 'text-embedding-3-small'",
                 "ALTER TABLE extracted_chunks ADD COLUMN embedding_dimension INTEGER DEFAULT 1536",
                 "ALTER TABLE extracted_chunks ADD COLUMN indexed_at TIMESTAMP",
+                "ALTER TABLE document_collections ADD COLUMN owner_user_id VARCHAR(36)",
+                "ALTER TABLE document_collections ADD COLUMN is_private BOOLEAN DEFAULT 0",
             ]
             for alter_sql in alter_statements:
                 try:
