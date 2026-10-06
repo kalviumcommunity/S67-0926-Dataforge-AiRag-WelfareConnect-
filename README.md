@@ -216,4 +216,5 @@ Example response:
 
 - **[Product Requirements Document](file:///e:/S67-0926-Dataforge-AiRag-WelfareConnect-/docs/product-requirements.md)**: User roles, user journeys, MVP functional/non-functional requirements, safety constraints, and success metrics.
 - **[Architecture Specification](file:///e:/S67-0926-Dataforge-AiRag-WelfareConnect-/docs/architecture.md)**: Frontend components, backend services, database schema, Pinecone vector indexing, RAG retrieval flow, and security model.
-- **[Data-Flow Diagram](file:///e:/S67-0926-Dataforge-AiRag-WelfareConnect-/docs/data-flow.mmd)**: Visual Mermaid diagram mapping document ingestion, semantic chunking, and grounded query execution.
+- **[Data-Flow Diagram](file:///e:/S67-0926-Dataforge-AiRag-WelfareConnect-/docs/data-flow.mmd)**: Visual Mermaid diagram mapping document ingestion, semantic chunking, and grounded query execution..
+  
